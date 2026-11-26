@@ -1,1 +1,0 @@
-{"dependencies":{"ws":"^8.18.0"},"description":"TANKS! multijugador con WebSocket (host autoritativo + servidor relay)","engines":{"node":">=18"},"name":"tanks-multijugador","private":true,"scripts":{"start":"node server.js"},"version":"2.0.0"}

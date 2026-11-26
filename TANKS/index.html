@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TANKS! — Multijugador WebSocket</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>TANKS<span>!</span></h1>
+    <p class="subtitle">Multijugador WebSocket · Host autoritativo · HTML5 Canvas + JS vanilla</p>
+    <span id="fps" class="fps">-- FPS</span>
+  </header>
+
+  <main class="layout">
+    <!-- Área de juego: el canvas se escala por CSS manteniendo su resolución interna -->
+    <section id="stage" class="stage">
+      <canvas id="game" width="880" height="640" aria-label="Área de juego"></canvas>
+
+      <!-- Menú inicial -->
+      <div id="menu" class="menu">
+        <form id="menu-form" class="menu-card" autocomplete="off">
+          <h2>Nueva partida</h2>
+
+          <label>Nombre
+            <input name="playerName" type="text" maxlength="30" value="Jugador" />
+          </label>
+
+          <fieldset class="mode">
+            <legend>Modo</legend>
+            <label><input type="radio" name="mode" value="host" checked /> Local / Host</label>
+            <label><input type="radio" name="mode" value="client" /> Unirse como cliente</label>
+          </fieldset>
+
+          <fieldset class="skins">
+            <legend>Personalizar</legend>
+            <label>Imagen del tanque
+              <input type="file" id="skin-tank" accept="image/*" />
+            </label>
+            <label>Imagen del misil
+              <input type="file" id="skin-missile" accept="image/*" />
+            </label>
+            <div class="skin-previews">
+              <img id="skin-tank-preview" alt="Vista previa del tanque" />
+              <img id="skin-missile-preview" alt="Vista previa del misil" />
+            </div>
+            <button type="button" id="btn-skins-reset" class="btn">Quitar personalización</button>
+            <p class="hint">Se aplica a tu tanque y tus misiles. La imagen del tanque gira hacia donde apuntas.</p>
+          </fieldset>
+
+          <fieldset class="models">
+            <legend>Modelo de tanque</legend>
+            <select id="model-select"></select>
+            <p id="model-desc" class="hint"></p>
+          </fieldset>
+
+          <div class="row">
+            <label>Sala
+              <input name="room" type="text" value="sala-local" maxlength="24" />
+            </label>
+            <label>Bots
+              <select name="bots">
+                <option>0</option><option>1</option><option>2</option><option selected>3</option>
+                <option>4</option><option>5</option><option>6</option><option>7</option>
+                <option>8</option><option>9</option>
+              </select>
+            </label>
+          </div>
+
+          <button type="submit" class="btn primary">¡Jugar!</button>
+          <p class="hint">W A S D mover · Ratón apuntar · Clic disparar · Clic der. habilidad especial<br/>PRIDE OVERLORD: Clic der. mantener = Rayo · Q Onda · E Escudo · Shift Turbo · F Zona<br/>CRUZ AZUL: Clic der. Descarga Celeste · Shift Turbo Azul · Escudo absorbe 1 golpe<br/>AMÉRICA: Clic der. Explosión Fénix · Shift Turbo Águila · Renacimiento 1 vez<br/>Host: crea la sala · Cliente: misma sala y mismo servidor</p>
+        </form>
+      </div>
+    </section>
+
+    <!-- Panel lateral -->
+    <aside class="panel">
+      <section>
+        <h3>Jugadores <small class="legend"><span>Bajas</span><span>Rondas</span></small></h3>
+        <ol id="scoreboard" class="scoreboard"></ol>
+      </section>
+
+      <section>
+        <h3>Partida</h3>
+        <div class="buttons">
+          <button id="btn-restart" class="btn" type="button">Reiniciar (R)</button>
+          <button id="btn-menu" class="btn" type="button">Menú</button>
+        </div>
+        <p class="small">Tu bala: <strong id="bounce-mode">—</strong> <kbd>B</kbd> alterna 1/2</p>
+      </section>
+
+      <section id="cryo-hud" class="cryo-hud hidden">
+        <h3>CRYO-01 FROST REAPER</h3>
+        <div class="cryo-row">
+          <span class="cryo-label">Núcleo criogénico</span>
+          <div class="cryo-bar"><div id="cryo-temp" class="cryo-fill"></div></div>
+          <span id="cryo-temp-text" class="cryo-value">—</span>
+        </div>
+        <div class="cryo-row">
+          <span class="cryo-label">CERO ABSOLUTO</span>
+          <div class="cryo-bar special"><div id="cryo-special" class="cryo-fill special"></div></div>
+          <span id="cryo-special-text" class="cryo-value">—</span>
+        </div>
+        <p class="small">Clic izq.: Cryo Cannon · Clic der. / <kbd>F</kbd>: CERO ABSOLUTO</p>
+      </section>
+
+      <section id="pride-hud" class="pride-hud hidden">
+        <h3>PRIDE OVERLORD 🌈</h3>
+        <div class="pride-row">
+          <span class="pride-label">Energía ⚡</span>
+          <div class="pride-bar"><div id="pride-energy" class="pride-fill energy"></div></div>
+          <span id="pride-energy-text" class="pride-value">—</span>
+        </div>
+        <div class="pride-row">
+          <span class="pride-label">Rayo del Orgullo</span>
+          <div class="pride-bar"><div id="pride-charge" class="pride-fill charge"></div></div>
+          <span id="pride-charge-text" class="pride-value">—</span>
+        </div>
+        <div class="pride-row">
+          <span class="pride-label">Onda (Q)</span>
+          <div class="pride-bar"><div id="pride-wave" class="pride-fill"></div></div>
+          <span id="pride-wave-text" class="pride-value">—</span>
+        </div>
+        <div class="pride-row">
+          <span class="pride-label">Escudo (E)</span>
+          <div class="pride-bar"><div id="pride-shield" class="pride-fill shield"></div></div>
+          <span id="pride-shield-text" class="pride-value">—</span>
+        </div>
+        <div class="pride-row">
+          <span class="pride-label">Zona de Gemidos (F)</span>
+          <div class="pride-bar"><div id="pride-zone" class="pride-fill zone"></div></div>
+          <span id="pride-zone-text" class="pride-value">—</span>
+        </div>
+        <p class="small">Clic: cañón · Clic der. mantener: Rayo · <kbd>Q</kbd> Onda · <kbd>E</kbd> Escudo · <kbd>Shift</kbd> Turbo · <kbd>F</kbd> Zona</p>
+      </section>
+
+      <section id="cruzazul-hud" class="cruzazul-hud hidden">
+        <h3>LA MÁQUINA - CRUZ AZUL</h3>
+        <div class="caz-row">
+          <span class="caz-label">Descarga Celeste</span>
+          <div class="caz-bar"><div id="caz-pulse" class="caz-fill pulse"></div></div>
+          <span id="caz-pulse-text" class="caz-value">—</span>
+        </div>
+        <div class="caz-row">
+          <span class="caz-label">Turbo Azul (Shift)</span>
+          <div class="caz-bar"><div id="caz-boost" class="caz-fill boost"></div></div>
+          <span id="caz-boost-text" class="caz-value">—</span>
+        </div>
+        <div class="caz-row">
+          <span class="caz-label">Escudo Celeste</span>
+          <div class="caz-bar"><div id="caz-shield" class="caz-fill shield"></div></div>
+          <span id="caz-shield-text" class="caz-value">—</span>
+        </div>
+        <p class="small">Clic: disparo normal · Clic der. / <kbd>F</kbd>: Descarga Celeste · <kbd>Shift</kbd>: Turbo Azul</p>
+      </section>
+
+      <section id="america-hud" class="america-hud hidden">
+        <h3>ÁGUILAS DEL AMÉRICA</h3>
+        <div class="ame-row">
+          <span class="ame-label">Explosión Fénix</span>
+          <div class="ame-bar"><div id="ame-pulse" class="ame-fill pulse"></div></div>
+          <span id="ame-pulse-text" class="ame-value">—</span>
+        </div>
+        <div class="ame-row">
+          <span class="ame-label">Turbo Águila (Shift)</span>
+          <div class="ame-bar"><div id="ame-boost" class="ame-fill boost"></div></div>
+          <span id="ame-boost-text" class="ame-value">—</span>
+        </div>
+        <div class="ame-row">
+          <span class="ame-label">Renacimiento</span>
+          <div class="ame-bar"><div id="ame-revive" class="ame-fill revive"></div></div>
+          <span id="ame-revive-text" class="ame-value">—</span>
+        </div>
+        <p class="small">Clic: disparo normal · Clic der. / <kbd>F</kbd>: Explosión Fénix · <kbd>Shift</kbd>: Turbo Águila</p>
+      </section>
+
+      <section id="void01-hud" class="void01-hud hidden">
+        <h3>VOID-01 // SOMBRA NEGRA</h3>
+        <div class="void-row">
+          <span class="void-label">Bomba nuclear (N)</span>
+          <div class="void-bar"><div id="void-nuke" class="void-fill nuke"></div></div>
+          <span id="void-nuke-text" class="void-value">—</span>
+        </div>
+        <div class="void-row">
+          <span class="void-label">Aimbot (T)</span>
+          <div class="void-bar"><div id="void-aimbot" class="void-fill aimbot"></div></div>
+          <span id="void-aimbot-text" class="void-value">—</span>
+        </div>
+        <div class="void-row">
+          <span class="void-label">Teletransporte (V)</span>
+          <div class="void-bar"><div id="void-teleport" class="void-fill teleport"></div></div>
+          <span id="void-teleport-text" class="void-value">—</span>
+        </div>
+        <div class="void-row">
+          <span class="void-label">Escudo</span>
+          <div class="void-bar"><div id="void-shield" class="void-fill shield"></div></div>
+          <span id="void-shield-text" class="void-value">—</span>
+        </div>
+        <p class="small">Plasma con explosión · <kbd>Shift</kbd> turbo infinito · <kbd>N</kbd> nuclear · <kbd>T</kbd> aimbot · <kbd>V</kbd> teletransporte</p>
+      </section>
+
+      <section>
+        <h3>Red <small>(debug)</small></h3>
+        <dl id="net-stats" class="net-stats"></dl>
+        <button id="btn-mirror" class="btn" type="button">Réplica por red simulada (G)</button>
+      </section>
+
+      <section class="controls">
+        <h3>Controles</h3>
+        <ul>
+          <li><kbd>W</kbd><kbd>S</kbd> avanzar / retroceder</li>
+          <li><kbd>A</kbd><kbd>D</kbd> rotar chasis</li>
+          <li><kbd>Ratón</kbd> apuntar torreta</li>
+          <li><kbd>Clic</kbd>/<kbd>Espacio</kbd> disparar</li>
+          <li><kbd>Clic der.</kbd>/<kbd>F</kbd> habilidad especial</li>
+          <li><kbd>Q</kbd>/<kbd>E</kbd>/<kbd>Shift</kbd> Onda / Escudo / Turbo (PRIDE)</li>
+          <li><kbd>Shift</kbd> Turbo Azul (CRUZ AZUL)</li>
+          <li><kbd>Shift</kbd> Turbo Águila (AMÉRICA)</li>
+          <li><kbd>N</kbd>/<kbd>T</kbd>/<kbd>V</kbd> Nuclear / Aimbot / Teletransporte (VOID-01)</li>
+          <li><kbd>P</kbd>/<kbd>Esc</kbd> pausa · <kbd>M</kbd> silencio</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+
+  <!--
+    Scripts clásicos (no módulos ES) para que el juego funcione abriendo
+    index.html directamente con file:// sin servidor. El ORDEN importa:
+    cada archivo sólo depende de los anteriores.
+  -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/entities/tank.js"></script>
+  <script src="js/entities/bullet.js"></script>
+  <script src="js/gameState.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/controllers.js"></script>
+  <script src="js/network.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/skins.js"></script>
+  <script src="js/models.js"></script>
+  <script src="js/pride.js"></script>
+  <script src="js/prideRender.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
+
